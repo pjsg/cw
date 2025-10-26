@@ -186,7 +186,7 @@ for msg in messages:
 
 ### Garbled output
 
-- Adjust `--pulse-threshold` 
+- Adjust `--pulse-threshold`
 - Check if signal is very weak or noisy
 - Try `--min-pulse` adjustment for very fast morse
 
@@ -225,8 +225,7 @@ for msg in messages:
 Typical processing times (on modern CPU):
 
 - **8 kHz, 6 seconds**: < 1 second
-- **48 kHz, 10 seconds**: ~2 seconds  
+- **48 kHz, 10 seconds**: ~2 seconds
 - **250 kHz, 5 seconds**: ~5 seconds
 
 Processing is CPU-bound and scales with sample rate × duration.
-
