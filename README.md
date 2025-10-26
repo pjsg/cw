@@ -105,7 +105,9 @@ Requirements:
 
 ## Testing
 
-Run the test suite to verify functionality:
+### Signal Tracker Tests
+
+Run the signal tracker test suite:
 
 ```bash
 python test_signal_tracker.py
@@ -118,6 +120,27 @@ The test suite generates synthetic morse code signals and validates detection:
 3. **Test 3**: Wideband detection across 100 kHz range
 
 Test files are generated in `/tmp/` for inspection.
+
+### Morse Decoder Tests
+
+Run the complete pipeline tests:
+
+```bash
+python test_morse_decoder.py
+```
+
+This tests the full system on real WAV files:
+
+1. **sample.wav**: Single transmission - callsign "N4LSJ CA"
+2. **test1.wav**: CQ call - "CQ CQ CQ DE W1ABK"
+
+### Manual Testing
+
+Test the complete pipeline on any WAV file:
+
+```bash
+python signal_tracker.py your_file.wav | python morse_decoder.py /dev/stdin --debug
+```
 
 ## Algorithm Overview
 
@@ -153,26 +176,169 @@ Test files are generated in `/tmp/` for inspection.
 - **Sample Rate**: Higher sample rates allow wider frequency coverage but require more processing
 - **Peak Separation**: Minimum frequency separation prevents false detections from spectral spreading
 
+## Complete Pipeline
+
+The system consists of two main components that work together:
+
+```
+WAV Audio → Signal Tracker → Pulse JSON → Morse Decoder → Decoded Text JSON
+```
+
+### Example Pipeline
+
+```bash
+# Process WAV file and decode morse
+python signal_tracker.py sample.wav | python morse_decoder.py /dev/stdin
+
+# With intermediate files for inspection
+python signal_tracker.py sample.wav -o pulses.json
+python morse_decoder.py pulses.json -o decoded.json --debug
+
+# Save both outputs
+python signal_tracker.py sample.wav | tee pulses.json | python morse_decoder.py /dev/stdin -o decoded.json
+```
+
 ## Future Enhancements
 
-Potential improvements for the signal tracker:
+Potential improvements:
 
-1. **Dynamic Range**: Automatic gain control for varying signal strengths
-2. **Frequency Drift**: Track signals that change frequency over time
-3. **Adaptive Parameters**: Automatic tuning of thresholds based on signal characteristics
-4. **GPU Acceleration**: Use GPU for FFT and filtering operations
-5. **Real-time Processing**: Streaming mode for live audio input
+**Signal Tracker:**
+1. Dynamic range / AGC for varying signal strengths
+2. Frequency drift tracking
+3. GPU acceleration for FFT operations
+4. Real-time streaming mode
 
-## Morse Decoder (Coming Soon)
+**Morse Decoder:**
+1. Error correction using context and dictionary
+2. Prosign detection (AR, SK, BT, etc.)
+3. Multi-transmission grouping (conversations)
+4. Confidence scores for decoded text
+5. Statistical language models for ambiguous decodes
 
-The morse decoder component will:
+## Morse Decoder
 
-- Consume pulse JSON output from the signal tracker
-- Group pulses by frequency
-- Estimate morse timing parameters (dit, dah, spaces)
-- Decode pulses into ASCII text
-- Handle both machine-generated and hand-keyed morse
-- Output decoded text in JSON Lines format
+The morse decoder (`morse_decoder.py`) consumes pulse JSON output from the signal tracker and decodes it into readable text.
+
+### Features
+
+- **Frequency Grouping**: Groups pulses by frequency to handle multiple simultaneous transmissions
+- **Adaptive Parameter Estimation**: Automatically estimates morse timing parameters (dit, dah, spaces)
+- **Clustering Algorithm**: Intelligently separates intra-symbol, inter-character, and inter-word spaces
+- **Variable Timing**: Handles both machine-generated and hand-keyed morse with varying timing
+- **Morse Code Dictionary**: Complete International Morse Code table including letters, numbers, and punctuation
+
+### Output Format
+
+The morse decoder outputs JSON Lines format, where each line contains:
+
+```json
+{
+  "timestamp": 0.503,
+  "text": "CQ CQ CQ DE W1ABK",
+  "frequency": 7031.0
+}
+```
+
+- `timestamp`: Start time of first decoded symbol in seconds
+- `text`: Decoded ASCII text
+- `frequency`: Center frequency of the signal in Hz
+
+### Usage
+
+#### Command Line
+
+Basic usage:
+
+```bash
+python morse_decoder.py pulses.json
+```
+
+Pipeline from signal tracker:
+
+```bash
+python signal_tracker.py input.wav | python morse_decoder.py /dev/stdin
+```
+
+With options:
+
+```bash
+python morse_decoder.py pulses.json \
+  --output decoded.json \
+  --min-pulses 5 \
+  --debug
+```
+
+Options:
+- `-o, --output`: Output file (default: stdout)
+- `--min-pulses`: Minimum pulses required for decoding (default: 5)
+- `--debug`: Enable debug output showing timing parameters
+
+#### Python API
+
+```python
+from morse_decoder import MorseDecoder
+
+# Create decoder
+decoder = MorseDecoder(
+    min_pulses_for_decode=5,
+    adaptive_timing=True,
+    debug=True
+)
+
+# Decode from file
+decoder.decode_from_file('pulses.json', 'decoded.json')
+
+# Or decode pulse list directly
+from signal_tracker import Pulse
+pulses = [...]  # List of Pulse objects
+messages = decoder.decode_pulses(pulses)
+```
+
+### Algorithm Overview
+
+#### Parameter Estimation
+
+The decoder automatically estimates morse timing parameters:
+
+1. **Pulse Classification**: Clusters pulse widths to separate dits from dahs
+2. **Gap Analysis**: Analyzes gaps between pulses to find natural breaks
+3. **Three-Cluster Detection**: Identifies intra-symbol, inter-character, and inter-word spaces
+4. **Adaptive Thresholds**: Uses the two largest jumps in gap distribution
+
+#### Decoding Process
+
+1. **Group by Frequency**: Separate pulses into frequency channels
+2. **Estimate Parameters**: Calculate timing parameters for each channel
+3. **Classify Pulses**: Determine if each pulse is a dit (.) or dah (-)
+4. **Split Characters**: Use gap thresholds to separate morse characters
+5. **Lookup & Decode**: Convert morse patterns to ASCII using lookup table
+6. **Format Output**: Generate JSON with timestamp, text, and frequency
+
+### Examples
+
+```bash
+# Example 1: Single file processing
+python signal_tracker.py sample.wav -o pulses.json
+python morse_decoder.py pulses.json -o decoded.json
+
+# Example 2: Pipeline processing
+python signal_tracker.py sample.wav | python morse_decoder.py /dev/stdin
+
+# Example 3: Debug mode to see timing analysis
+python signal_tracker.py test1.wav | python morse_decoder.py /dev/stdin --debug
+```
+
+### Test Results
+
+**sample.wav**: Contains callsign "N4LSJ CA" at 750 Hz
+```json
+{"timestamp": 0.503, "text": "N4LSJ CA", "frequency": 750}
+```
+
+**test1.wav**: Contains CQ call "CQ CQ CQ DE W1ABK" at 7031 Hz
+```json
+{"timestamp": 0.006, "text": "CQ CQ CQ DE W1ABK", "frequency": 7031}
+```
 
 ## License
 
