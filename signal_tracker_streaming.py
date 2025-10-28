@@ -17,6 +17,7 @@ import struct
 from dataclasses import dataclass
 from typing import Optional, List, Dict
 from collections import defaultdict
+import wave
 
 
 @dataclass
@@ -345,6 +346,12 @@ def main():
         description='Streaming signal tracker for continuous audio input'
     )
     parser.add_argument(
+        '--wav-file',
+        action='store_true',
+        default=False,
+        help='Input is a WAV file (default: False, raw PCM from stdin)'
+    )
+    parser.add_argument(
         '-r', '--sample-rate',
         type=int,
         default=8000,
@@ -396,6 +403,15 @@ def main():
     )
 
     args = parser.parse_args()
+
+    if args.wav_file:
+        # Process WAV file
+
+        # just read the wav file header
+        with wave.open(sys.stdin.buffer, mode='rb') as wav_file:
+            args.sample_rate = wav_file.getframerate()
+            args.channels = wav_file.getnchannels()
+            args.sample_width = wav_file.getsampwidth()
 
     # Create streaming tracker
     tracker = SignalTrackerStreaming(

@@ -46,10 +46,18 @@ class FrequencyState:
     last_pulse_time: float = 0.0
     morse_params: Optional[Dict] = None
     params_estimated: bool = False
+    first_pulse_time: float = 0.0
+    pulses_count: int = 0
+    pulses_count_last_estimate: int = 0
 
     def add_pulse(self, pulse: Dict):
         """Add a pulse and update state."""
         self.pulses.append(pulse)
+        self.pulses_count += 1
+        if len(self.pulses) > 100:
+            self.pulses.pop(0)  # Keep pulse list manageable
+        if not self.first_pulse_time:
+            self.first_pulse_time = pulse['timestamp']
         self.last_pulse_time = pulse['timestamp'] + pulse['width']
 
 
@@ -110,8 +118,10 @@ class MorseDecoderStreaming:
         state.add_pulse(pulse)
 
         # Estimate parameters if we have enough pulses
-        if not state.params_estimated and len(state.pulses) >= self.min_pulses_for_params:
+        if (not state.params_estimated and len(state.pulses) >= self.min_pulses_for_params) \
+            or state.pulses_count - state.pulses_count_last_estimate >= 50:
             state.morse_params = self._estimate_params(state.pulses)
+            state.pulses_count_last_estimate = state.pulses_count
             state.params_estimated = True
 
             if self.debug:
@@ -130,17 +140,20 @@ class MorseDecoderStreaming:
                 char_gap_threshold = state.morse_params['dit_time'] * 2.5
                 word_gap_threshold = state.morse_params['dit_time'] * 6.0
 
-                if gap >= word_gap_threshold and state.current_word:
-                    # Word boundary - emit word
-                    self._emit_text(state.frequency, state.current_word.strip())
-                    state.current_word = ""
-                    state.current_symbol = ""
-                elif gap >= char_gap_threshold and state.current_symbol:
+                if gap >= char_gap_threshold and state.current_symbol:
                     # Character boundary - decode symbol and add to word
                     char = self._decode_symbol(state.current_symbol)
-                    if char != '?':
+                    if char:
                         state.current_word += char
                     state.current_symbol = ""
+
+                if gap >= word_gap_threshold and state.current_word:
+                    # Word boundary - emit word
+                    self._emit_text(state.frequency, state.current_word + " ", state.first_pulse_time)
+                    state.current_word = ""
+                    state.current_symbol = ""
+                    state.first_pulse_time = pulse['timestamp']
+
 
             # Classify pulse as dit or dah and add to current symbol
             symbol = self._classify_pulse(pulse, state.morse_params)
@@ -178,8 +191,9 @@ class MorseDecoderStreaming:
 
         # Word timeout - output word and reset
         if time_since_last > self.word_timeout and state.current_word:
-            self._emit_text(state.frequency, state.current_word.strip())
+            self._emit_text(state.frequency, state.current_word, state.first_pulse_time)
             state.current_word = ""
+            state.first_pulse_time = 0.0
 
     def _estimate_params(self, pulses: List[Dict]) -> Dict:
         """
@@ -262,9 +276,9 @@ class MorseDecoderStreaming:
         else:
             if self.debug:
                 print(f"Unknown symbol: {symbol}", file=sys.stderr, flush=True)
-            return '?'
+            return "["+symbol+"]"
 
-    def _emit_text(self, frequency: float, text: str):
+    def _emit_text(self, frequency: float, text: str, timestamp: float):
         """
         Emit decoded text as JSON line.
 
@@ -272,9 +286,9 @@ class MorseDecoderStreaming:
             frequency: Frequency of signal
             text: Decoded text
         """
-        if text and text != '?':
+        if text:
             output = {
-                'timestamp': time.time(),
+                'timestamp': timestamp,
                 'text': text,
                 'frequency': frequency
             }
@@ -320,8 +334,8 @@ def main():
     parser.add_argument(
         '--min-pulses',
         type=int,
-        default=10,
-        help='Minimum pulses for parameter estimation (default: 10)'
+        default=20,
+        help='Minimum pulses for parameter estimation (default: 20)'
     )
     parser.add_argument(
         '--debug',
