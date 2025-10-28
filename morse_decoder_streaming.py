@@ -126,6 +126,11 @@ class MorseDecoderStreaming:
             state.pulses_count_last_estimate = state.pulses_count
             state.pulse_time_last_estimate = state.last_pulse_time
 
+            if self.debug:
+                print(f"[{freq} Hz] Params: dit={state.morse_params['dit_time']*1000:.1f}ms "
+                      f"dah={state.morse_params['dah_time']*1000:.1f}ms",
+                      file=sys.stderr, flush=True)
+
             if not state.params_estimated:
                 # This is the first estimate. We should backup and replay the pulses.
                 state.params_estimated = True
@@ -139,11 +144,6 @@ class MorseDecoderStreaming:
                 for replay_pulse in pulses_to_replay:
                     self.process_pulse(replay_pulse)
                 return  # Already processed this pulse in replay
-
-            if self.debug:
-                print(f"[{freq} Hz] Params: dit={state.morse_params['dit_time']*1000:.1f}ms "
-                      f"dah={state.morse_params['dah_time']*1000:.1f}ms",
-                      file=sys.stderr, flush=True)
 
         # If we have parameters, process the pulse
         if state.params_estimated:
