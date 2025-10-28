@@ -49,6 +49,7 @@ class FrequencyState:
     first_pulse_time: float = 0.0
     pulses_count: int = 0
     pulses_count_last_estimate: int = 0
+    pulse_time_last_estimate: float = 0.0
 
     def add_pulse(self, pulse: Dict):
         """Add a pulse and update state."""
@@ -119,10 +120,25 @@ class MorseDecoderStreaming:
 
         # Estimate parameters if we have enough pulses
         if (not state.params_estimated and len(state.pulses) >= self.min_pulses_for_params) \
-            or state.pulses_count - state.pulses_count_last_estimate >= 50:
+            or state.pulses_count - state.pulses_count_last_estimate >= 50 \
+            or state.last_pulse_time - state.pulse_time_last_estimate >= 20.0:
             state.morse_params = self._estimate_params(state.pulses)
             state.pulses_count_last_estimate = state.pulses_count
-            state.params_estimated = True
+            state.pulse_time_last_estimate = state.last_pulse_time
+
+            if not state.params_estimated:
+                # This is the first estimate. We should backup and replay the pulses.
+                state.params_estimated = True
+                pulses_to_replay = state.pulses.copy()
+                state.pulses = []
+                state.current_symbol = ""
+                state.current_word = ""
+                state.first_pulse_time = 0.0
+                state.last_pulse_time = 0.0
+
+                for replay_pulse in pulses_to_replay:
+                    self.process_pulse(replay_pulse)
+                return  # Already processed this pulse in replay
 
             if self.debug:
                 print(f"[{freq} Hz] Params: dit={state.morse_params['dit_time']*1000:.1f}ms "
