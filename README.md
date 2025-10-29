@@ -2,6 +2,8 @@
 
 A Python-based signal processing system for detecting and decoding multiple simultaneous morse code transmissions across a wide frequency band.
 
+**WARNING** This is intentionally vibe coded (using Cursor) so that I could see what all the hype is about. It built the `signal_tracker.py` and `morse_decoder.py` first according to [the outline](outline.md). I then got it to create the streaming versions (which is what I wanted in the first place). Some minor fixes have it working for single signals in a relatively noise free environment. I'm trying to figure out whether it is worth trying to make this code work, or whether I should just start vibeing again! I guess that this is the fate of every vibecoded project. This README is really for the [batch interface](BATCH_VS_STREAMING.md). 
+
 ## Components
 
 ### Signal Tracker
